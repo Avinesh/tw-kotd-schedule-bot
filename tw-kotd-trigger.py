@@ -7,11 +7,12 @@ Requires: /etc/openqa/client.conf or ~/.config/openqa/client.conf with an
 
 State: per-arch repo revision/build is saved to tw_kotd_trigger_state.json next
 to this script after each --commit, so later runs only trigger on new builds.
-Dry runs don't write it; deleting it re-triggers every arch.
+Dry runs don't write it; --force ignores it; deleting it re-triggers every arch.
 
 Usage:
-    ./kotd_trigger.py             # dry run (default) - prints what it would do
-    ./kotd_trigger.py --commit    # actually posts to openQA
+    ./tw-kotd-trigger.py                                  # dry run (default) - prints what it would do
+    ./tw-kotd-trigger.py --commit                         # actually posts to openQA
+    ./tw-kotd-trigger.py --force --arch x86_64 --commit   # re-trigger even if the revision is unchanged
 """
 from __future__ import annotations
 
@@ -252,6 +253,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--commit", action="store_true", help="Actually post to openQA (default: dry run)")
     parser.add_argument("--arch", choices=ARCHES.keys(), help="Only check this architecture")
+    parser.add_argument("--force", action="store_true", help="Trigger even if the repo revision matches the saved state")
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -267,10 +269,12 @@ def main() -> None:
         last_seen = state.get(arch, {}).get("revision")
 
         if revision == last_seen:
-            log.info("%s: no new kernel build (revision %s unchanged)", arch, revision)
-            continue
-
-        log.info("%s: new kernel build detected (revision %s -> %s)", arch, last_seen, revision)
+            if not args.force:
+                log.info("%s: no new kernel build (revision %s unchanged)", arch, revision)
+                continue
+            log.info("%s: revision %s unchanged, triggering anyway (--force)", arch, revision)
+        else:
+            log.info("%s: new kernel build detected (revision %s -> %s)", arch, last_seen, revision)
 
         build = get_kernel_build(primary_xml_url, arch, cfg["package"])
         if build is None:
