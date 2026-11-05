@@ -132,7 +132,7 @@ def get_repo_metadata(repo_url: str) -> tuple[str, str]:
     return revision, repo_url.rstrip("/") + "/" + primary_href
 
 
-def get_kernel_build(primary_xml_url: str, arch: str, package: str) -> str:
+def get_kernel_build(primary_xml_url: str, arch: str, package: str) -> str | None:
     r = requests.get(primary_xml_url, timeout=60)
     r.raise_for_status()
     root = ET.fromstring(gzip.decompress(r.content))
@@ -145,7 +145,7 @@ def get_kernel_build(primary_xml_url: str, arch: str, package: str) -> str:
         ver, rel, epoch = ver_el.get("ver"), ver_el.get("rel"), ver_el.get("epoch")
         build = f"{ver}-{rel}"
         return f"{epoch}:{build}" if epoch and epoch != "0" else build
-    raise ValueError(f"{package} ({arch}) not found in {primary_xml_url}")
+    return None
 
 
 def resolve_hdd_settings(
@@ -273,6 +273,9 @@ def main() -> None:
         log.info("%s: new kernel build detected (revision %s -> %s)", arch, last_seen, revision)
 
         build = get_kernel_build(primary_xml_url, arch, cfg["package"])
+        if build is None:
+            log.warning("%s: %s not in the repo yet (revision %s), skipping", arch, cfg["package"], revision)
+            continue
         log.info("%s: kernel build is %s", arch, build)
 
         base_tw_build = None
